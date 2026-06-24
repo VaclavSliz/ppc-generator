@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PPC Generátor inzerátů</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f1117;
+      --surface:  #181c27;
+      --card:     #1e2335;
+      --border:   #2a3049;
+      --border2:  #3a4465;
+      --accent:   #4f7cff;
+      --accent2:  #7c5cfc;
+      --text:     #e8eaf2;
+      --muted:    #8890aa;
+      --success:  #34c97a;
+      --warn:     #f59e0b;
+      --danger:   #f04d4d;
+      --mono:     'IBM Plex Mono', monospace;
+      --sans:     'Inter', sans-serif;
+      --radius:   10px;
+      --radius-lg:16px;
+    }
+
+    html { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.6; }
+    body { min-height: 100vh; }
+
+    /* Layout */
+    .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 16px;
+      display: flex; flex-direction: column; gap: 4px;
+      position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    }
+    .sidebar-logo {
+      font-size: 13px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--accent); padding: 0 8px 20px; border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .sidebar-label {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--muted); padding: 4px 8px 8px;
+    }
+    .tab-btn {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; padding: 9px 10px; border: none; border-radius: var(--radius);
+      background: transparent; color: var(--muted);
+      font-family: var(--sans); font-size: 13.5px; font-weight: 500;
+      cursor: pointer; transition: all 0.15s; text-align: left;
+    }
+    .tab-btn:hover { background: var(--card); color: var(--text); }
+    .tab-btn.active { background: var(--card); color: var(--text); }
+    .tab-btn.active::before {
+      content: ''; display: block; width: 3px; height: 16px;
+      background: linear-gradient(180deg, var(--accent), var(--accent2));
+      border-radius: 2px; margin-right: 2px; flex-shrink: 0;
+    }
+    .tab-badge {
+      margin-left: auto; font-size: 10px; font-family: var(--mono);
+      color: var(--muted); background: var(--border); padding: 1px 6px; border-radius: 4px;
+    }
+
+    /* Main content */
+    .main { padding: 36px 40px; max-width: 820px; }
+    .page-header { margin-bottom: 28px; }
+    .page-title { font-size: 22px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .page-desc { font-size: 14px; color: var(--muted); }
+
+    /* Form */
+    .form-section { display: none; flex-direction: column; gap: 16px; }
+    .form-section.active { display: flex; }
+
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 12.5px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+    .field input, .field textarea {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 10px 14px;
+      color: var(--text); font-family: var(--sans); font-size: 14px;
+      transition: border-color 0.15s; outline: none; width: 100%;
+    }
+    .field input:focus, .field textarea:focus { border-color: var(--accent); }
+    .field textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
+    .field-hint { font-size: 12px; color: var(--muted); }
+
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    /* Generate button */
+    .btn-generate {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 12px 24px; border: none; border-radius: var(--radius);
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff; font-family: var(--sans); font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: opacity 0.15s; margin-top: 8px;
+      width: 100%;
+    }
+    .btn-generate:hover { opacity: 0.88; }
+    .btn-generate:disabled { opacity: 0.45; cursor: not-allowed; }
+    .spinner {
+      width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin 0.7s linear infinite; display: none;
+    }
+    .btn-generate.loading .spinner { display: block; }
+    .btn-generate.loading .btn-label { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Output */
+    .output { margin-top: 32px; display: none; flex-direction: column; gap: 16px; }
+    .output.visible { display: flex; }
+
+    .output-group { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+    .output-group-header {
+      padding: 10px 16px; border-bottom: 1px solid var(--border);
+      font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--muted); display: flex; align-items: center; justify-content: space-between;
+    }
+    .output-items { display: flex; flex-direction: column; }
+    .output-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 10px 16px; border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    .output-item:last-child { border-bottom: none; }
+    .output-item:hover { background: var(--surface); }
+    .output-text { flex: 1; font-size: 14px; color: var(--text); line-height: 1.5; font-family: var(--sans); }
+    .output-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .char-count {
+      font-family: var(--mono); font-size: 11px; padding: 2px 7px;
+      border-radius: 5px; background: var(--border); color: var(--muted);
+    }
+    .char-count.ok { color: var(--success); background: rgba(52,201,122,0.1); }
+    .char-count.warn { color: var(--warn); background: rgba(245,158,11,0.1); }
+    .char-count.over { color: var(--danger); background: rgba(240,77,77,0.1); }
+    .copy-btn {
+      padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+      background: transparent; color: var(--muted); font-size: 12px;
+      cursor: pointer; transition: all 0.15s; white-space: nowrap;
+      font-family: var(--sans);
+    }
+    .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .copy-btn.copied { border-color: var(--success); color: var(--success); }
+
+    /* Copy all button */
+    .copy-all-btn {
+      padding: 3px 10px; border: 1px solid var(--border2); border-radius: 6px;
+      background: transparent; color: var(--muted); font-size: 11px;
+      cursor: pointer; transition: all 0.15s; font-family: var(--sans);
+    }
+    .copy-all-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Error */
+    .error-box {
+      background: rgba(240,77,77,0.08); border: 1px solid rgba(240,77,77,0.3);
+      border-radius: var(--radius); padding: 14px 16px;
+      font-size: 13.5px; color: var(--danger); display: none;
+    }
+    .error-box.visible { display: block; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    @media (max-width: 680px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; padding: 12px; }
+      .sidebar-logo { display: none; }
+      .main { padding: 20px 16px; }
+      .field-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">PPC Generátor</div>
+    <div class="sidebar-label">Typ kampaně</div>
+    <button class="tab-btn active" data-type="rsa">
+      RSA <span class="tab-badge">Search</span>
+    </button>
+    <button class="tab-btn" data-type="pmax">
+      Performance Max <span class="tab-badge">PMax</span>
+    </button>
+    <button class="tab-btn" data-type="demandgen">
+      Demand Gen
+    </button>
+    <button class="tab-btn" data-type="dsa">
+      DSA <span class="tab-badge">Dynamic</span>
+    </button>
+    <button class="tab-btn" data-type="display">
+      Display <span class="tab-badge">Banner</span>
+    </button>
+    <button class="tab-btn" data-type="youtube">
+      YouTube / Video
+    </button>
+    <button class="tab-btn" data-type="shopping">
+      Shopping <span class="tab-badge">Feed</span>
+    </button>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="page-header">
+      <h1 class="page-title" id="page-title">RSA — Responsive Search Ad</h1>
+      <p class="page-desc" id="page-desc">Google Ads vyhledávání — 15 headlines (max 30 zn.) + 4 descriptions (max 90 zn.)</p>
+    </div>
+
+    <!-- RSA -->
+    <div class="form-section active" id="form-rsa">
+      <div class="field">
+        <label>Produkt / služba</label>
+        <input type="text" id="rsa-product" placeholder="např. Pojištění vozidla online" />
+      </div>
+      <div class="field">
+        <label>Hlavní výhody (USP)</label>
+        <textarea id="rsa-usp" placeholder="Srovnání cen za 2 min, online sjednání 24/7, sleva 15 % pro nové klienty"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Klíčová slova (volitelné)</label>
+          <input type="text" id="rsa-kw" placeholder="pojištění auta, autopojištění" />
+        </div>
+        <div class="field">
+          <label>Výzva k akci (CTA)</label>
+          <input type="text" id="rsa-cta" placeholder="Sjednat online, Získat nabídku" />
+        </div>
+      </div>
+    </div>
+
+    <!-- PMax -->
+    <div class="form-section" id="form-pmax">
+      <div class="field">
+        <label>Produkt / služba</label>
+        <input type="text" id="pmax-product" placeholder="např. E-shop s módou" />
+      </div>
+      <div class="field">
+        <label>Hlavní výhody (USP)</label>
+        <textarea id="pmax-usp" placeholder="Doprava zdarma od 999 Kč, 30 dní na vrácení, 500+ značek"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Cílová skupina</label>
+          <input type="text" id="pmax-audience" placeholder="Ženy 25–45, milovnice módy" />
+        </div>
+        <div class="field">
+          <label>Název značky</label>
+          <input type="text" id="pmax-brand" placeholder="Fashionista.cz" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Výzva k akci (CTA)</label>
+        <input type="text" id="pmax-cta" placeholder="Nakoupit, Prozkoumat kolekci" />
+      </div>
+    </div>
+
+    <!-- Demand Gen -->
+    <div class="form-section" id="form-demandgen">
+      <div class="field">
+        <label>Produkt / služba</label>
+        <input type="text" id="dg-product" placeholder="např. Online kurz fotografování" />
+      </div>
+      <div class="field">
+        <label>Hlavní výhody (USP)</label>
+        <textarea id="dg-usp" placeholder="Pro začátečníky i pokročilé, certifikát, 50+ videolekcí"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Cílová skupina</label>
+          <input type="text" id="dg-audience" placeholder="Lidé zajímající se o fotografii" />
+        </div>
+        <div class="field">
+          <label>Emocionální apel</label>
+          <input type="text" id="dg-emotion" placeholder="Proměň svůj koníček v umění" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Výzva k akci (CTA)</label>
+        <input type="text" id="dg-cta" placeholder="Začít zdarma, Zkusit první lekci" />
+      </div>
+    </div>
+
+    <!-- DSA -->
+    <div class="form-section" id="form-dsa">
+      <div class="field">
+        <label>Web / kategorie produktů</label>
+        <input type="text" id="dsa-product" placeholder="E-shop se zahradní technikou" />
+      </div>
+      <div class="field">
+        <label>Hlavní výhody</label>
+        <textarea id="dsa-usp" placeholder="Montáž v ceně, servis po celé ČR, nejnižší cena garantována"></textarea>
+      </div>
+      <div class="field">
+        <label>Výzva k akci (CTA)</label>
+        <input type="text" id="dsa-cta" placeholder="Objednat, Zjistit cenu, Kontaktovat" />
+      </div>
+    </div>
+
+    <!-- Display -->
+    <div class="form-section" id="form-display">
+      <div class="field">
+        <label>Produkt / služba</label>
+        <input type="text" id="dis-product" placeholder="CRM software pro malé firmy" />
+      </div>
+      <div class="field">
+        <label>Hlavní výhody</label>
+        <textarea id="dis-usp" placeholder="30 dní zdarma, bez kreditní karty, import dat za 5 minut"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Cílová skupina</label>
+          <input type="text" id="dis-audience" placeholder="Majitelé malých firem" />
+        </div>
+        <div class="field">
+          <label>Výzva k akci (CTA)</label>
+          <input type="text" id="dis-cta" placeholder="Vyzkoušet zdarma, Získat demo" />
+        </div>
+      </div>
+    </div>
+
+    <!-- YouTube -->
+    <div class="form-section" id="form-youtube">
+      <div class="field">
+        <label>Produkt / služba</label>
+        <input type="text" id="yt-product" placeholder="Aplikace na hubnutí" />
+      </div>
+      <div class="field">
+        <label>Hlavní výhody</label>
+        <textarea id="yt-usp" placeholder="Personalizovaný plán, AI trenér, -10 kg za 12 týdnů"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Problém / bolest diváka</label>
+          <input type="text" id="yt-hook" placeholder="Diety nefungují, nemáš čas" />
+        </div>
+        <div class="field">
+          <label>Výzva k akci (CTA)</label>
+          <input type="text" id="yt-cta" placeholder="Stáhnout zdarma, Začít dnes" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Shopping -->
+    <div class="form-section" id="form-shopping">
+      <div class="field">
+        <label>Název produktu</label>
+        <input type="text" id="sh-product" placeholder="Robotický vysavač Roomba j7+" />
+      </div>
+      <div class="field">
+        <label>Klíčové vlastnosti / parametry</label>
+        <textarea id="sh-features" placeholder="Mapování místností, čistí vlasy mazlíčků, Wi-Fi, zásobník prachu 0,4 l"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Značka</label>
+          <input type="text" id="sh-brand" placeholder="iRobot" />
+        </div>
+        <div class="field">
+          <label>Cena (volitelné)</label>
+          <input type="text" id="sh-price" placeholder="8 990 Kč" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Button -->
+    <button class="btn-generate" id="gen-btn" onclick="generate()">
+      <div class="spinner" id="spinner"></div>
+      <span class="btn-label">Generovat inzeráty</span>
+    </button>
+
+    <!-- Error -->
+    <div class="error-box" id="error-box"></div>
+
+    <!-- Output -->
+    <div class="output" id="output"></div>
+  </main>
+</div>
+
+<script>
+const CONFIGS = {
+  rsa: {
+    title: "RSA — Responsive Search Ad",
+    desc: "Google Ads vyhledávání — 15 headlines (max 30 zn.) + 4 descriptions (max 90 zn.)",
+    getPrompt: () => `Jsi senior PPC copywriter. Vytvoř texty pro Google Ads RSA.
+Produkt: ${v('rsa-product')}
+USP: ${v('rsa-usp')}
+Klíčová slova: ${v('rsa-kw') || '—'}
+CTA: ${v('rsa-cta')}
+Vytvoř 15 headlines (max 30 zn. každý) a 4 descriptions (max 90 zn. každý). Headlines musí být rozmanité.
+Odpověz POUZE v JSON bez markdown: {"headlines":["...x15"],"descriptions":["...x4"]}`,
+    limits: { headlines: 30, descriptions: 90 },
+    labels: { headlines: "Headlines", descriptions: "Descriptions" }
+  },
+  pmax: {
+    title: "Performance Max",
+    desc: "Google Ads — headlines (30 zn.), long headlines (90 zn.), descriptions (90 zn.)",
+    getPrompt: () => `Jsi senior PPC copywriter. Vytvoř texty pro Google Performance Max asset group.
+Produkt: ${v('pmax-product')}, USP: ${v('pmax-usp')}, Cílová skupina: ${v('pmax-audience')}, Značka: ${v('pmax-brand')}, CTA: ${v('pmax-cta')}
+Vytvoř: 15 headlines (max 30 zn.), 5 long_headlines (max 90 zn.), 4 descriptions (max 90 zn.), 1 business_name (max 25 zn.)
+Odpověz POUZE v JSON bez markdown: {"headlines":["..."],"long_headlines":["..."],"descriptions":["..."],"business_name":"..."}`,
+    limits: { headlines: 30, long_headlines: 90, descriptions: 90, business_name: 25 },
+    labels: { headlines: "Headlines", long_headlines: "Long Headlines", descriptions: "Descriptions", business_name: "Business name" }
+  },
+  demandgen: {
+    title: "Demand Gen",
+    desc: "Google Demand Gen — headlines (40 zn.), descriptions (90 zn.), emotivní tón",
+    getPrompt: () => `Jsi senior PPC copywriter na Demand Gen. Texty musí budit zájem a emoce — cílíš na horní část trychtýře.
+Produkt: ${v('dg-product')}, USP: ${v('dg-usp')}, Cílová skupina: ${v('dg-audience')}, Emocionální apel: ${v('dg-emotion')}, CTA: ${v('dg-cta')}
+Vytvoř: 5 headlines (max 40 zn.), 5 descriptions (max 90 zn.), 1 cta_text (max 20 zn.)
+Odpověz POUZE v JSON bez markdown: {"headlines":["..."],"descriptions":["..."],"cta_text":"..."}`,
+    limits: { headlines: 40, descriptions: 90, cta_text: 20 },
+    labels: { headlines: "Headlines", descriptions: "Descriptions", cta_text: "CTA text" }
+  },
+  dsa: {
+    title: "DSA — Dynamic Search Ads",
+    desc: "Google DSA — pouze descriptions (max 80 zn.), headlines generuje Google automaticky",
+    getPrompt: () => `Jsi senior PPC copywriter. Pro DSA vytvoř pouze descriptions — headlines generuje Google z webu.
+Web: ${v('dsa-product')}, USP: ${v('dsa-usp')}, CTA: ${v('dsa-cta')}
+Vytvoř 4 descriptions (max 80 zn. každý). Každý musí být samostatně smysluplný.
+Odpověz POUZE v JSON bez markdown: {"descriptions":["...x4"]}`,
+    limits: { descriptions: 80 },
+    labels: { descriptions: "Descriptions" }
+  },
+  display: {
+    title: "Display — Responzivní bannerová reklama",
+    desc: "Google Display — short headlines (30 zn.), long headline (90 zn.), descriptions (90 zn.)",
+    getPrompt: () => `Jsi PPC copywriter. Vytvoř texty pro Google responzivní display reklamu.
+Produkt: ${v('dis-product')}, USP: ${v('dis-usp')}, Cílová skupina: ${v('dis-audience')}, CTA: ${v('dis-cta')}
+Vytvoř: 5 short_headlines (max 30 zn.), 1 long_headline (max 90 zn.), 5 descriptions (max 90 zn.)
+Odpověz POUZE v JSON bez markdown: {"short_headlines":["..."],"long_headline":"...","descriptions":["..."]}`,
+    limits: { short_headlines: 30, long_headline: 90, descriptions: 90 },
+    labels: { short_headlines: "Short Headlines", long_headline: "Long Headline", descriptions: "Descriptions" }
+  },
+  youtube: {
+    title: "YouTube / Video reklama",
+    desc: "YouTube In-stream a In-feed — hooks, overlay titulky, companion bannery",
+    getPrompt: () => `Jsi PPC copywriter na YouTube reklamy.
+Produkt: ${v('yt-product')}, USP: ${v('yt-usp')}, Bolest diváka: ${v('yt-hook')}, CTA: ${v('yt-cta')}
+Vytvoř: 3 hooks (max 100 zn., musí zaujmout do 5 sekund), 2 overlay_titles (max 30 zn.), 3 companion_headlines (max 25 zn.), 2 infeed_descriptions (max 70 zn.), 1 cta_text (max 15 zn.)
+Odpověz POUZE v JSON bez markdown: {"hooks":["..."],"overlay_titles":["..."],"companion_headlines":["..."],"infeed_descriptions":["..."],"cta_text":"..."}`,
+    limits: { hooks: 100, overlay_titles: 30, companion_headlines: 25, infeed_descriptions: 70, cta_text: 15 },
+    labels: { hooks: "Video hooks (prvních 5 sekund)", overlay_titles: "Overlay titulky", companion_headlines: "Companion banner headlines", infeed_descriptions: "In-feed descriptions", cta_text: "CTA text" }
+  },
+  shopping: {
+    title: "Shopping / Google Merchant",
+    desc: "Produktový feed — title (150 zn.), description (500 zn.), custom labels",
+    getPrompt: () => `Jsi PPC specialista na Google Shopping. Vytvoř optimalizovaný produktový feed.
+Produkt: ${v('sh-product')}, Vlastnosti: ${v('sh-features')}, Značka: ${v('sh-brand')}, Cena: ${v('sh-price') || '—'}
+Vytvoř: 3 titles (max 150 zn., různé pořadí atributů), 1 description (max 500 zn., bohatá na klíčová slova), 5 custom_labels (krátká slova pro segmentaci)
+Odpověz POUZE v JSON bez markdown: {"titles":["..."],"description":"...","custom_labels":["..."]}`,
+    limits: { titles: 150, description: 500, custom_labels: null },
+    labels: { titles: "Product titles", description: "Product description", custom_labels: "Custom labels" }
+  }
+};
+
+let currentType = 'rsa';
+
+function v(id) { return (document.getElementById(id) || {}).value || ''; }
+
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const type = btn.dataset.type;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
+    document.getElementById('form-' + type).classList.add('active');
+    currentType = type;
+    const cfg = CONFIGS[type];
+    document.getElementById('page-title').textContent = cfg.title;
+    document.getElementById('page-desc').textContent = cfg.desc;
+    document.getElementById('output').classList.remove('visible');
+    document.getElementById('output').innerHTML = '';
+    document.getElementById('error-box').classList.remove('visible');
+  });
+});
+
+function charClass(len, limit) {
+  if (!limit) return '';
+  if (len > limit) return 'over';
+  if (len > limit * 0.9) return 'warn';
+  return 'ok';
+}
+
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+  });
+  const orig = btn.textContent;
+  btn.textContent = 'Zkopírováno ✓';
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+}
+
+function renderOutput(data) {
+  const cfg = CONFIGS[currentType];
+  const out = document.getElementById('output');
+  out.innerHTML = '';
+
+  Object.entries(data).forEach(([key, val]) => {
+    const label = cfg.labels[key] || key;
+    const limit = cfg.limits[key];
+    const items = Array.isArray(val) ? val : [val];
+
+    const group = document.createElement('div');
+    group.className = 'output-group';
+
+    const header = document.createElement('div');
+    header.className = 'output-group-header';
+    header.innerHTML = `<span>${label}${limit ? ` · max ${limit} zn.` : ''}</span>`;
+
+    if (items.length > 1) {
+      const copyAll = document.createElement('button');
+      copyAll.className = 'copy-all-btn';
+      copyAll.textContent = 'Kopírovat vše';
+      copyAll.onclick = () => copyText(items.join('\n'), copyAll);
+      header.appendChild(copyAll);
+    }
+    group.appendChild(header);
+
+    const itemsEl = document.createElement('div');
+    itemsEl.className = 'output-items';
+
+    items.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'output-item';
+
+      const text = document.createElement('div');
+      text.className = 'output-text';
+      text.textContent = item;
+      row.appendChild(text);
+
+      const meta = document.createElement('div');
+      meta.className = 'output-meta';
+
+      if (limit) {
+        const cc = document.createElement('span');
+        cc.className = 'char-count ' + charClass(item.length, limit);
+        cc.textContent = item.length + '/' + limit;
+        meta.appendChild(cc);
+      }
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'copy-btn';
+      copyBtn.textContent = 'Kopírovat';
+      copyBtn.onclick = () => copyText(item, copyBtn);
+      meta.appendChild(copyBtn);
+
+      row.appendChild(meta);
+      itemsEl.appendChild(row);
+    });
+
+    group.appendChild(itemsEl);
+    out.appendChild(group);
+  });
+
+  out.classList.add('visible');
+}
+
+async function generate() {
+  const cfg = CONFIGS[currentType];
+  const btn = document.getElementById('gen-btn');
+  const errBox = document.getElementById('error-box');
+
+  btn.disabled = true;
+  btn.classList.add('loading');
+  errBox.classList.remove('visible');
+  document.getElementById('output').classList.remove('visible');
+
+  try {
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: cfg.getPrompt() })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+
+    const { text } = await resp.json();
+    const clean = text.replace(/```json[\s\S]*?```|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    renderOutput(parsed);
+  } catch (e) {
+    errBox.textContent = 'Chyba: ' + (e.message || 'Zkus to znovu.');
+    errBox.classList.add('visible');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  }
+}
+</script>
+</body>
+</html>
